@@ -12,10 +12,10 @@ A complete implementation of the Transformer architecture in PyTorch, built from
 ## Modules
 
 - [x] Positional Encoding
-- [ ] Input Embeddings
-- [ ] Multi-Head Attention
+- [x] Input Embeddings
+- [x] Multi-Head Attention
 - [ ] Layer Normalization
-- [ ] Feed Forward Network
+- [x] Feed Forward Network
 - [ ] Residual Connections
 - [ ] Encoder
 - [ ] Decoder
