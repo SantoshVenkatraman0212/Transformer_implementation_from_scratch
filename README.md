@@ -16,8 +16,8 @@ A complete implementation of the Transformer architecture in PyTorch, built from
 - [x] Multi-Head Attention
 - [x] Layer Normalization
 - [x] Feed Forward Network
-- [ ] Residual Connections
-- [ ] Encoder
+- [x] Residual Connections
+- [x] Encoder
 - [ ] Decoder
 - [ ] Complete Transformer
 
