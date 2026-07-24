@@ -4,6 +4,7 @@ The Multi-head attention implementation includes the following:
 1. Projection of Input embeddings into query, key and value tensors
 2. Propagation of query, key and values across attention heads
 3. Causal masking for autoregression
+4. Cross attention for decoder block (Query from Decoder, Key and Value from Encoder)
 4. Multi-head attention output computation, concatenation, and projection
 
 This is the core Transformers
@@ -16,7 +17,7 @@ import torch.nn as nn
 class MultiHeadAttention(nn.Module):
     '''
     This class implements the full multi-head attention mechanism.
-    It receives input embeddings (token emb + pos enc), performs self attention, and returns combined output
+    It receives input embeddings (token emb + pos enc), performs self attention (normal and masked) and cross attention, and returns combined output
     '''
     def __init__(self, n_heads: int, d_model: int, dropout: float, mask: bool):
         super().__init__()
@@ -41,36 +42,58 @@ class MultiHeadAttention(nn.Module):
         # Masking is required for decoder module (the model shouldn't see the future tokens)
         self.mask = mask
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cross_x: torch.Tensor = None) -> torch.Tensor:
         '''
-        This function takes input embeddings, and implements self attention
+        This function takes input embeddings (encoder, and decoder), and implements self attention
         Args:
             x: Input embeddings (batch_size, seq_len, d_model)
+            cross_x: Encoder output embeddings tensor for cross attention in decoder
         
         Returns:
             proj_outputs: Combined final multi-head attention output tensor ((batch_size, seq_len, d_model))
         '''
         # Getting the batch size from the input embeddings
-        batch_size, seq_len, _ = x.size
+        batch_size, seq_len = x.size(0), x.size(1)
         # Query is forward pass (dot product of x and w_q) 
         query = self.w_q(x) # shape: (batch_size, seq_len, d_model)
-        # Key is dot product x and w_k
-        key = self.w_k(x) # shape: (batch_size, seq_len, d_model)
-        # Value is dot product of x and w_v
-        value = self.w_v(x) # shape: (batch_size, seq_len, d_model)
-
         # Propagating Q, K, and V across the multi-attention heads
+        # ---------- Self attention (normal and masked) ----------
         # Q, K and V are projected from (batch_size, seq_len, d_model) -> (batch_size, seq_len, n_heads, d_k) i.e. each head sees d_k dims of the tokens
         # From (batch_size, seq_len, n_heads, d_k) they are changed to (batch_size, n_heads, seq_len, n_heads, d_k)
         # This is because for each batch each attention head sees the entire sequence, but a part of the token representation (d_model)
         query = query.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
-        key = key.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
-        value = value.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
+        if cross_x is None: # If it's self attention in encoder or masked self attention in decoder
+            # Key is dot product x and w_k
+            key = self.w_k(x) # shape: (batch_size, seq_len, d_model)
+            # Value is dot product of x and w_v
+            value = self.w_v(x) # shape: (batch_size, seq_len, d_model)
+            key = key.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
+            value = value.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
+        else: # if it's cross attention in decoder
+            # Cross attention doesn't accept causal mask
+            assert self.mask is not True, "Masked cross attention is not possible"
+            # Ensuring the batch_size is the same for decoder input, and also the encoder output
+            assert x.size(0) == cross_x.size(0), "Batch size mismatch"
+            # seq_len for the encoder output
+            # Note: The sequence length for decoder might not be the same as that of encoder, as the generated seq can be of any length
+            cross_x_seq_len = cross_x.size(1)
+            # Getting the key, and value from encoder 
+            # Here the decoder asks "for whatever I'm trying to generate, which tokens are relevant given encoder's rich contextual representation"
+            # This is why decoder does the querying part while the key, and values are obtained from the encoder
+            key = self.w_k(cross_x)
+            value = self.w_v(cross_x)
+            # ---------- Cross attention ----------
+            # Q, K and V are projected from (batch_size, cross_x_seq_len, d_model) -> (batch_size, cross_x_seq_len, n_heads, d_k) i.e. each head sees d_k dims of the tokens
+            # From (batch_size, cross_x_seq_len, n_heads, d_k) they are changed to (batch_size, n_heads, cross_x_seq_len, n_heads, d_k)
+            key = key.view(batch_size, cross_x_seq_len, self.n_heads, self.d_k).transpose(1, 2)
+            value = value.view(batch_size, cross_x_seq_len, self.n_heads, self.d_k).transpose(1, 2)
 
         # Relevance score (attention scores)
-        # Shapes of query, key, and values will be (batch_size, n_heads, seq_len, d_k)
+        # Shapes of query, key, and values will be (batch_size, n_heads, seq_len, d_k) or (batch_size, n_heads, cross_x_seq_len, d_k)
+        # This depends on self or cross attention
         # Therefore for dot product, the shape of key is changed from (batch_size, n_heads, seq_len, d_k) -> (batch_size, n_heads, d_k, seq_len)
-        attn_sc = query @ key.transpose(2, 3) # Shape: (batch_size, n_heads, seq_len, seq_len)
+        # For cross attention the shape of key is changed from (batch_size, n_heads, cross_x_seq_len, d_k) -> (batch_size, n_heads, d_k, cross_x_seq_len)
+        attn_sc = query @ key.transpose(2, 3) # self attention -> Shape: (batch_size, n_heads, seq_len, seq_len) | cross -> Shape: (batch_size, n_heads, seq_len, cross_x_seq_len)
         # Scaling the attention scores
         attn_sc = attn_sc / math.sqrt(self.d_k)
 
@@ -99,7 +122,9 @@ class MultiHeadAttention(nn.Module):
         mha_output = attn_wt @ value
         # Concatenating outputs of multi-head attention
         # So for us to combine the outputs from multiple heads, which were projected from d_model to n_heads, d_k
-        # The mha_output shape should be brought from (batch_size, n_heads, seq_len, d_k) -> (batch_size, seq_len, n_heads, d_k)
+        # The mha_output shape should be brought from: 
+        # self attention: (batch_size, n_heads, seq_len, d_k) -> (batch_size, seq_len, n_heads, d_k)
+        # cross attention: (batch_size, n_heads, cross_x_seq_len, d_k) -> (batch_size, cross_x_seq_len, n_heads, d_k)
         attn_output = mha_output.transpose(1, 2).view(batch_size, seq_len, self.d_model)
 
         # Final linear projection
