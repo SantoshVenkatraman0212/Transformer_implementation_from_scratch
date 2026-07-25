@@ -10,7 +10,7 @@ class Encoder(nn.Module):
     '''
     This class builds the full transformer encoder by stacking N encoder blocks sequentially
     '''
-    def __init__(self, n_heads: int, d_model: int, dropout: float, n_blocks: int):
+    def __init__(self, n_heads: int, n_blocks: int, d_model: int, dropout: float):
         super().__init__()
         # Using nn.ModulesList for creating a list of N encoder blocks, as separate class instances that will be registered by PyTorch
         # Separate instances are required, as the blocks downstream should get receive outputs of the preceeding blocks as input, and not same initial input for all the blocks
