@@ -18,8 +18,8 @@ A complete implementation of the Transformer architecture in PyTorch, built from
 - [x] Feed Forward Network
 - [x] Residual Connections
 - [x] Encoder
-- [ ] Decoder
-- [ ] Complete Transformer
+- [x] Decoder
+- [x] Complete Transformer
 
 ## References
 
