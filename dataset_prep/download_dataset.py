@@ -36,7 +36,6 @@ def main() -> None:
     '''
     Main function for running the download, and extraction script
     '''
-    # Calling the function to download, and extract the dataset
     download_and_extract()
 
 if __name__ == '__main__':
