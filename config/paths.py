@@ -11,3 +11,6 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / 'data'
 RAW_DATA_DIR = DATA_DIR / 'raw'
 PROCESSED_DATA_DIR = DATA_DIR / 'processed'
+RAW_TRAIN_DIR = RAW_DATA_DIR / 'train.parquet'
+RAW_VAL_DIR = RAW_DATA_DIR / 'validation.parquet'
+RAW_TEST_DIR = RAW_DATA_DIR / 'test.parquet'
