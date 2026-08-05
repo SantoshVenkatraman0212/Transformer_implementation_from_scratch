@@ -5,7 +5,7 @@ on train, val and test sets
 # Importing necessary libraries
 import pandas as pd
 import numpy as np
-from config.paths import RAW_TRAIN_DIR, RAW_TEST_DIR, RAW_VAL_DIR
+from config.paths import RAW_DATA_DICT
 
 def perform_eda(file_path: str) -> None:
     '''
@@ -18,29 +18,31 @@ def perform_eda(file_path: str) -> None:
         None
     '''
     df = pd.read_parquet(file_path)
+    # Getting the basic dataset statistics
     print('---------- Dataset exploration report ----------\n')
     print(f'Dataset preview (1st 5 samples)\n{df.head()}\n')
     print(f'Columns\n{df.columns}\n')
     print(f'Dataset shape:\n{df.shape}\n')
     print('Column data types\n')
-    print(f'{df.info()}')
-    print(f'Null values\n{df.isnull().sum()}')
-    print(f'Empty string values\n{df.apply(lambda col: col.str.strip().eq('').sum())}')
-    print(f'Duplicate rows (before removal)\n{df.duplicated().sum()}\n\n')
-    df = df.drop_duplicates(keep = 'first')
-    print(f'Duplicate rows (after removal)\n{df.duplicated().sum()}\n\n')
+    print(f'{df.info()}\n')
+    # Checking for empty cells in each col
+    print(f'Null values\n{df.isnull().sum()}\n')
+    # Checking for empty string in each col
+    print(f'Empty string values\n{df.apply(lambda col: col.str.strip().eq('').sum())}\n')
+    # No of duplicated samples
+    print(f'Duplicate rows\n{df.duplicated().sum()}\n\n')
+    # Getting the mean, median, and standard deviation of the sequence lengths in english and german 
     de_str_len = [len(s) for s in df['de'].str.strip()]
     en_str_len = [len(s) for s in df['en'].str.strip()]
     print('----- String length stats -----')
-    print(f'Deutsch\nmax: {np.max(de_str_len)} | min: {np.min(de_str_len)} | mean: {np.mean(de_str_len)} | median: {np.median(de_str_len)} | standard deviation: {np.std(de_str_len)}')
+    print(f'Deutsch\nmax: {np.max(de_str_len)} | min: {np.min(de_str_len)} | mean: {np.mean(de_str_len)} | median: {np.median(de_str_len)} | standard deviation: {np.std(de_str_len)}\n')
     print(f'English\nmax: {np.max(en_str_len)} | min: {np.min(en_str_len)} | mean: {np.mean(en_str_len)} | median: {np.median(en_str_len)} | standard deviation: {np.std(en_str_len)}')
     
-def main():
+def main() -> None:
     '''
     Main function for orchestration of EDA
     '''
-    paths_dict = {'TRAIN': RAW_TRAIN_DIR, 'VAL': RAW_VAL_DIR, 'TEST': RAW_TEST_DIR}
-    for split, path in paths_dict.items():
+    for split, path in RAW_DATA_DICT.items():
         print(f'{split} SET')
         perform_eda(path)
         print('\n\n')

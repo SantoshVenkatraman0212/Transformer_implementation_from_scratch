@@ -8,3 +8,4 @@ seaborn==0.13.2
 scikit-learn==1.7.2
 datasets==4.1.1
 huggingface_hub==0.34.4
+tqdm==4.67.1

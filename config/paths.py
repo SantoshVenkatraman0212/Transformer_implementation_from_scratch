@@ -14,3 +14,6 @@ PROCESSED_DATA_DIR = DATA_DIR / 'processed'
 RAW_TRAIN_DIR = RAW_DATA_DIR / 'train.parquet'
 RAW_VAL_DIR = RAW_DATA_DIR / 'validation.parquet'
 RAW_TEST_DIR = RAW_DATA_DIR / 'test.parquet'
+
+# Raw data dict with split mapping
+RAW_DATA_DICT = {'TRAIN': RAW_TRAIN_DIR, 'VAL': RAW_VAL_DIR, 'TEST': RAW_TEST_DIR}
