@@ -100,3 +100,6 @@ coverage.xml
 # OS generated
 *.swp
 *.swo
+
+# Generated tokenizer/model artifacts
+artifacts/

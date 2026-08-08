@@ -10,7 +10,7 @@ import pyarrow.parquet as pq
 from tqdm import tqdm
 from config.paths import RAW_DATA_DICT
 from config.paths import PROCESSED_DATA_DIR
-from config.settings import BATCH_SIZE
+from config.settings import DATA_PREP_BATCH_SIZE
 
 def data_preprocess(df: pd.DataFrame) -> pd.DataFrame:
     '''
@@ -71,11 +71,11 @@ def batched_preprocess(in_file_path: Path, out_file_path: Path) -> None:
     try: 
         # Getting total number of batches for each train/val/test split
         # Using math.ceil to account for spillover samples
-        total_batches = math.ceil(parquet_file_obj.metadata.num_rows / BATCH_SIZE)
+        total_batches = math.ceil(parquet_file_obj.metadata.num_rows / DATA_PREP_BATCH_SIZE)
         # Only runs when there are batches to be written 
         # Iterating through each batch of size 100k (safe default) of input file parquet object
         # in_file_path.stem here gives name of the dataset split near the progress bar
-        for batch in tqdm(parquet_file_obj.iter_batches(batch_size = BATCH_SIZE), total = total_batches, desc = in_file_path.stem):
+        for batch in tqdm(parquet_file_obj.iter_batches(batch_size = DATA_PREP_BATCH_SIZE), total = total_batches, desc = in_file_path.stem):
             # Converting each batch from pyarrow RecordBatch to pandas DF to call data_preprocess function
             batch_df = batch.to_pandas()
             # Dataset cleaning (clean_batch_df is a dataframe with shape (BATCH_SIZE, 2))
