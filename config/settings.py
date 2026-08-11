@@ -7,3 +7,5 @@ DATA_PREP_BATCH_SIZE = 100000
 VOCAB_SIZE = 37000 # Vocab size from Attention is All you Need 2017
 # Min frequency (BPE Merge)
 MIN_FREQUENCY = 2
+# Batch size
+TRAIN_BATCH_SIZE = 32
