@@ -39,14 +39,14 @@ class EncoderBlock(nn.Module):
         # FeedForward
         self.feed_forward = FeedForward(d_model = d_model, dropout = dropout)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         '''
         This function orchestrates the flow of tensor through the entire encoder block
         '''
         # Input residual
         residual = x
         # Self attention
-        x = self.attention(x)
+        x = self.attention(x, padding_mask = padding_mask)
         # Input + MHA output
         x = x + residual
         # LayerNorm-1

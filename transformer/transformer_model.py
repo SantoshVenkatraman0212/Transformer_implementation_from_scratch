@@ -37,7 +37,8 @@ class Transformer(nn.Module):
         # Final Linear projection layer before softmax of shape: (d_model, tgt_vocab_size)
         self.proj = nn.Linear(d_model, tgt_vocab_size)
 
-    def forward(self, src_x: torch.Tensor, tgt_x: torch.Tensor) -> torch.Tensor:
+    def forward(self, src_x: torch.Tensor, tgt_x: torch.Tensor, src_padding_mask: torch.Tensor | None = None, 
+                tgt_padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         '''
         This forward function controls the flow of input token IDs tensor through the entire transformer network
         '''
@@ -50,9 +51,9 @@ class Transformer(nn.Module):
         # Target positional encodings (batch_size, tgt_seq_len, d_model)
         tgt_x = self.tgt_positional_encodings(tgt_x)
         # Input token embeddings to rich contextual representations (batch_size, src_seq_len, d_model)
-        src_x = self.encoder(src_x)
+        src_x = self.encoder(src_x, padding_mask = src_padding_mask)
         # Rich contextual representations to target side contextual representation (decoder sequence) (batch_size, tgt_seq_len, d_model)
-        x = self.decoder(tgt_x, src_x)
+        x = self.decoder(tgt_x, src_x, src_padding_mask = src_padding_mask, tgt_padding_mask = tgt_padding_mask)
         # Linear projection layer to match vocabulary size (batch_size, decoder_seq_len, d_model) -> (batch_size, tgt_seq_len, vocab_size) 
         x = self.proj(x)
         

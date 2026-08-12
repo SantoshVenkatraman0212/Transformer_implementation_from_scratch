@@ -15,13 +15,14 @@ class Decoder(nn.Module):
         super().__init__()
         self.decoder_blocks = nn.ModuleList([DecoderBlock(n_heads = n_heads, d_model = d_model, dropout = dropout) for _ in range(n_blocks)])
 
-    def forward(self, x: torch.Tensor, cross_x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cross_x: torch.Tensor, src_padding_mask: torch.Tensor | None = None,
+                tgt_padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         '''
         The forward function controls flow of embeddings across the decoder blocks by iterating through each of them.
         Here cross_x i.e. encoder output is the same, as the encoder's final output (rich contextual representation) is used by decoder blocks
         However x will have the input for the next decoder block i.e. output from the previous decoder block
         '''
         for block in self.decoder_blocks:
-            x = block(x, cross_x)
+            x = block(x, cross_x, src_padding_mask = src_padding_mask, tgt_padding_mask = tgt_padding_mask)
 
         return x

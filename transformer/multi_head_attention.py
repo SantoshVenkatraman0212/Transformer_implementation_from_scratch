@@ -42,7 +42,7 @@ class MultiHeadAttention(nn.Module):
         # Masking is required for decoder module (the model shouldn't see the future tokens)
         self.mask = mask
     
-    def forward(self, x: torch.Tensor, cross_x: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cross_x: torch.Tensor = None, padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         '''
         This function takes input embeddings (encoder, and decoder), and implements self attention
         Args:
@@ -112,7 +112,24 @@ class MultiHeadAttention(nn.Module):
             tri_tensor[mask_coords] = -torch.inf
             # Adding the mask to attention scores
             attn_sc = attn_sc + tri_tensor
-            
+
+        # Applying pad token mask to the attn_sc
+        # Padding mask will be of dim (batch_size, seq_len)
+        # It checks for each sequence in a batch, which tokens are real, and which ones are pad tokens
+        if padding_mask is not None:
+            # Doing sanity checks on the padding_mask to verify its tensor shapes are compatible
+            # Checking if its just a 2-D Tensor
+            assert padding_mask.dim() == 2
+            # Checking the 0th dim of padding_mask is batch_size, and last dim is seq_len or cross_x_seq_len 
+            # This dims have to be compatible with the Attention scores
+            assert padding_mask.size(0) == batch_size
+            assert padding_mask.size(-1) == attn_sc.size(-1)
+
+            padding_mask = padding_mask.view(batch_size, 1, 1, attn_sc.size(-1))
+            # Here wherever padding_mask is True, it means they are real tokens to attend to
+            # ~padding_mask gives the coords of the pad tokens i.e. not-real tokens
+            # They're convered to -infinity
+            attn_sc = attn_sc.masked_fill(~padding_mask, -torch.inf)
         # Computing attention weights
         attn_wt = torch.softmax(attn_sc, dim = -1)
         # Dropout on attenion weight
@@ -125,8 +142,8 @@ class MultiHeadAttention(nn.Module):
         # The mha_output shape should be brought from: 
         # self attention: (batch_size, n_heads, seq_len, d_k) -> (batch_size, seq_len, n_heads, d_k)
         # cross attention: (batch_size, n_heads, cross_x_seq_len, d_k) -> (batch_size, cross_x_seq_len, n_heads, d_k)
-        attn_output = mha_output.transpose(1, 2).view(batch_size, seq_len, self.d_model)
-
+        # .contiguous ensures that the output is a contiguous tensor (continuous memory locations)
+        attn_output = mha_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
         # Final linear projection
         proj_output = self.o_proj(attn_output)
 

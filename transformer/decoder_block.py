@@ -39,14 +39,16 @@ class DecoderBlock(nn.Module):
         # FeedForward
         self.feed_forward = FeedForward(d_model = d_model, dropout = dropout)
 
-    def forward(self, x: torch.Tensor, cross_x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cross_x: torch.Tensor, src_padding_mask: torch.Tensor | None = None, 
+                tgt_padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         '''
         The forward function orchestrates the flow of input from masked self attention to final output
         '''
         # Input residual
         residual = x
         # Masked self attention ensures the decoder block doesn't attend to the future tokens
-        x = self.causal_attention(x)
+        # Since it predicts the target, it gets target padding mask
+        x = self.causal_attention(x, padding_mask = tgt_padding_mask)
         # Residual Connection-1 (Input residual + Causal attention)
         x = x + residual
         # LayerNorm-1
@@ -54,7 +56,8 @@ class DecoderBlock(nn.Module):
         # LayerNorm-1 residual
         residual = x
         # Cross Attention (x: Decoder input, cross_x: Encoder output)
-        x = self.cross_attention(x, cross_x)
+        # Here it's K, and V are from encoder; Therefore it gets source padding mask
+        x = self.cross_attention(x, cross_x, padding_mask = src_padding_mask)
         # Residual Connection-2 (LayerNorm-1 residual + Cross Attention output)
         x = x + residual
         # LayerNorm-2

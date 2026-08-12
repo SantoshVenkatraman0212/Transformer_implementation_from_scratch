@@ -16,12 +16,12 @@ class Encoder(nn.Module):
         # Separate instances are required, as the blocks downstream should get receive outputs of the preceeding blocks as input, and not same initial input for all the blocks
         self.encoder_blocks = nn.ModuleList([EncoderBlock(n_heads = n_heads, d_model = d_model, dropout = dropout) for _ in range(n_blocks)])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         '''
         This function iterates through the entire encoder blocks ModuleList consisting of each encoder block
         At every stage the output will become the input of the next encoder block
         '''
         for encoder_block in self.encoder_blocks:
-            x = encoder_block(x)
+            x = encoder_block(x, padding_mask = padding_mask)
 
         return x
