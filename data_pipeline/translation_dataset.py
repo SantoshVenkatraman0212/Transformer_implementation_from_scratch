@@ -7,7 +7,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import Dataset
 from tokenizers import Tokenizer
-
+from config.settings import SRC_SEQ_LEN, TGT_SEQ_LEN
 class TranslationDataset(Dataset):
     '''
     This class acts as a PyTorch Dataset class that instantiates dataset, tokenizer, and special tokens
@@ -70,8 +70,13 @@ class TranslationDataset(Dataset):
         source_enc = self.tokenizer.encode(source_text)
         target_enc = self.tokenizer.encode(target_text)
         # Getting the token IDs of the source and target encodings from Hugging Face tokenizers object
-        source_id = source_enc.ids
-        target_id = target_enc.ids
+        # Here we hard lock the source and target encodings to match the source and target sequence lengths
+        # i.e. The encoder_input tensor will only have token IDs for 0 to SRC_SEQ_LEN - 1 th token
+        # Similarly the decoder_input tensor will only have token IDs for 0 to TGT_SEQ_LEN - 1 th token.
+        # This is because the model won't have positional encodings for positions above the source and target context lengths
+        # However the seq lengths currently being used account for about 98-99% of the dataset, thus causing truncation only in extreme rare outliers
+        source_id = source_enc.ids[: SRC_SEQ_LEN - 1]
+        target_id = target_enc.ids[: TGT_SEQ_LEN - 1]
         # Creating the encoder input list
         # Encoder receives the input embeddings and creates rich contextual representations
         # No autoregressive prediction like the decoder

@@ -20,6 +20,8 @@ PROCESSED_TEST = PROCESSED_DATA_DIR / 'test.parquet'
 # Paths to ARTIFACTS
 ARTIFACTS_DIR = PROJECT_DIR / 'artifacts'
 TOKENIZER_PATH = ARTIFACTS_DIR / 'tokenizer_en_de_37k.json'
+# Paths to model checkpoint
+CHECKPOINT_DIR = PROJECT_DIR / 'outputs' / 'checkpoints'
 # Raw data dict with split mapping
 RAW_DATA_DICT = {'TRAIN': RAW_TRAIN_DIR, 'VAL': RAW_VAL_DIR, 'TEST': RAW_TEST_DIR}
 PROCESSED_DATA_DICT = {'TRAIN': PROCESSED_TRAIN, 'VAL': PROCESSED_VAL, 'TEST': PROCESSED_TEST}

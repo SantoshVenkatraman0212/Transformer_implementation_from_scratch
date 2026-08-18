@@ -1,6 +1,6 @@
 '''
 This file depicts full from scratch build and implementation of the decoder block
-The deocder block consists of the following modules:
+The decoder block consists of the following modules:
 1. Masked Multi-head Attention (MHA / Causal self attention) for autoregressive generation
 2. Residual Connection-1 (Input + Masked MHA Output)
 3. LayerNorm-1
