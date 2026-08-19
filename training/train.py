@@ -1,5 +1,9 @@
 '''
 This file depicts the entire training pipeline of the transformer model
+Training and validation tensor operations use PyTorch's AMP Grad Scaler 
+for intelligent switching between FP32 and FP16 for avoiding OOM error
+PyTorch's GradScaler is used for training stability, and smooth gradient scaling
+during backpropagation
 '''
 # Importing necessary libraries
 import math
@@ -9,6 +13,7 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LambdaLR
+from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 from config.settings import (DEVICE, D_MODEL, N_BLOCKS, N_HEADS, SRC_VOCAB_SIZE, 
                              TGT_VOCAB_SIZE, SRC_SEQ_LEN, TGT_SEQ_LEN, DROPOUT, WARMUP_STEPS, N_EPOCHS, PATIENCE)
@@ -69,8 +74,8 @@ def lambda_lr_scheduler(step: int) -> float:
     return lr
     
 
-def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device: torch.device, 
-          criterion: nn.Module, optimizer: torch.optim.Optimizer, scheduler: LambdaLR) -> float:
+def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device: str, 
+          criterion: nn.Module, optimizer: torch.optim.Optimizer, scheduler: LambdaLR, scaler: GradScaler) -> float:
     '''
     This function runs the training steps for 1 epoch for the transformer model.
     The following steps are performed:
@@ -92,7 +97,7 @@ def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device:
             batchwise-iterable for train dataset
         pad_id: int
             token ID for pad token
-        device: torch.device
+        device: str
             Compute device for training
         
         criterion: nn.Module
@@ -101,6 +106,8 @@ def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device:
             Optimizer for regulating the learning rate, and kicking off backpropagation
         scheduler: LambdaLR
             Scales the learning rate per step
+        scaler: GradScaler
+            Handles gradient scaling during backpropagation for training stability (avoids fluctuations)
     
     Returns:
         training loss: float
@@ -120,18 +127,24 @@ def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device:
         src_padding_mask = encoder_input != pad_id 
         tgt_padding_mask = decoder_input != pad_id
         # Resetting the optimizer
-        optimizer.zero_grad()
-        # Logits
-        logits = model(encoder_input, decoder_input, src_padding_mask, tgt_padding_mask)
-        # Cross Entropy loss per batch
-        batch_loss = criterion(logits, label)
+        optimizer.zero_grad(set_to_none = True)
+        # Mixed precision computation for forward pass and cross-entropy loss
+        # Note: device_type arg of autocast expects device_type as str and not torch.device
+        # Here the device is already a string so can be directly used; else device.type should be used
+        with torch.amp.autocast(device_type = device, dtype = torch.float16):
+            # Logits
+            logits = model(encoder_input, decoder_input, src_padding_mask, tgt_padding_mask)
+            # Cross Entropy loss per batch
+            batch_loss = criterion(logits, label)
         # Accumulated loss (per epoch)
         #.item() here prevents computation graph creation for every batch
         loss += batch_loss.item()
         # Back propagation
-        batch_loss.backward()
+        scaler.scale(batch_loss).backward()
         # Updating the params
-        optimizer.step()
+        scaler.step(optimizer)
+        # Updating the scaler
+        scaler.update()
         # Updating the scheduler
         scheduler.step()
 
@@ -141,7 +154,7 @@ def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device:
     # Overall avg loss for 1 epoch
     return loss / len(train_dataloader)
 
-def evaluate(model: Transformer, eval_dataloader: DataLoader, pad_id: int, criterion: nn.Module, device: torch.device) -> float:
+def evaluate(model: Transformer, eval_dataloader: DataLoader, pad_id: int, criterion: nn.Module, device: str) -> float:
     '''
     This function runs the eval loop for the transformer model for 1 epoch.
     This begins after 1 full epoch of model training. The function does the following:
@@ -162,9 +175,9 @@ def evaluate(model: Transformer, eval_dataloader: DataLoader, pad_id: int, crite
             token ID for pad token
         criterion: nn.Module
             eval loss function
-        device: torch.device
+        device: str
             Compute device for evals
-    
+        
     Returns:
         eval loss: float
     '''
@@ -183,10 +196,12 @@ def evaluate(model: Transformer, eval_dataloader: DataLoader, pad_id: int, crite
             # Getting the source and target padding masks
             src_padding_mask = encoder_input != pad_id
             tgt_padding_mask = decoder_input != pad_id
-            # Logits on eval set
-            logits = model(encoder_input, decoder_input, src_padding_mask, tgt_padding_mask)
-            # Batch-wise eval loss
-            batch_eval_loss = criterion(logits, label)
+            # Mixed precision computation
+            with torch.amp.autocast(device_type = device, dtype = torch.float16):
+                # Logits on eval set
+                logits = model(encoder_input, decoder_input, src_padding_mask, tgt_padding_mask)
+                # Batch-wise eval loss
+                batch_eval_loss = criterion(logits, label)
             # Accumulated batch-wise eval loss (sum of losses across all batches)
             eval_loss += batch_eval_loss.item()
             progress_bar.set_postfix(batch_loss = f'{batch_eval_loss:.4f}')
@@ -195,7 +210,8 @@ def evaluate(model: Transformer, eval_dataloader: DataLoader, pad_id: int, crite
         
 
 def save_model_checkpoint(model: Transformer, lr: float, optimizer: torch.optim.Optimizer, 
-                          scheduler: LambdaLR, train_loss: float, val_loss: float, epoch: int, save_path: Path) -> None:
+                          scheduler: LambdaLR, train_loss: float, val_loss: float, epoch: int, save_path: Path, 
+                          scaler: GradScaler) -> None:
     '''
     This function saves model checkpoints as .pt every epoch, and also
     the best model checkpoints when the eval loss is loss than its previous epoch value 
@@ -217,20 +233,22 @@ def save_model_checkpoint(model: Transformer, lr: float, optimizer: torch.optim.
             Epoch number
         save_path: Path
             Checkpoint save path
+        scaler: GradScaler 
+            Ensures smooth gradient scaling during backpropagation
     '''
     # Creating if the checkpoint dir doesn't exist
     save_path.parent.mkdir(parents = True, exist_ok = True)
     # Model checkpoint saving
     torch.save({'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 
-                'scheduler_state_dict': scheduler.state_dict(), 'learning_rate': lr, 'train_loss': train_loss, 
-                'val_loss': val_loss, 'epoch': epoch}, save_path)
+                'scheduler_state_dict': scheduler.state_dict(), 'scaler_state_dict': scaler.state_dict(), 
+                'learning_rate': lr, 'train_loss': train_loss, 'val_loss': val_loss, 'epoch': epoch}, save_path)
 
 def main():
     '''
     Orchestrator for the transformer model training pipeline
     '''
     # Getting the dataloaders
-    train_dataloader, val_dataloader, test_dataloader = create_dataloaders()
+    train_dataloader, val_dataloader, _ = create_dataloaders()
     # Getting the pad ID
     pad_id = train_dataloader.dataset.pad_id
     # model instance
@@ -256,14 +274,17 @@ def main():
     print(f'Transformer training will run on: {DEVICE}')
     # Initializing early stopping patience
     patience = 0
+    # Creating a PyTorch scaler instance for mixed precision
+    scaler = GradScaler(device = DEVICE)
     # Beginning of training epochs
     for i in range(N_EPOCHS):
         print(f'--- Epoch - {i + 1} ---')
         # Training loss
         train_loss = train(model = model, train_dataloader = train_dataloader, pad_id = pad_id, 
-                           device = DEVICE, criterion = loss, optimizer = optimizer, scheduler = lr_scheduler)
+                           device = DEVICE, criterion = loss, optimizer = optimizer, scheduler = lr_scheduler, scaler = scaler)
         # Val loss
-        val_loss = evaluate(model = model, eval_dataloader = val_dataloader, pad_id = pad_id, criterion = loss, device = DEVICE)
+        val_loss = evaluate(model = model, eval_dataloader = val_dataloader, pad_id = pad_id, 
+                            criterion = loss, device = DEVICE)
         # Getting the perplexity scores as e^loss for that epoch
         train_perplexity = math.exp(train_loss)
         val_perplexity = math.exp(val_loss)
@@ -277,7 +298,7 @@ def main():
         # The same file gets overwritten epoch after epoch
         latest_chkpt = CHECKPOINT_DIR / 'latest.pt'
         save_model_checkpoint(model = model, lr = lr, optimizer = optimizer, scheduler = lr_scheduler, 
-                              train_loss = train_loss, val_loss = val_loss, epoch = (i + 1), save_path = latest_chkpt)
+                              train_loss = train_loss, val_loss = val_loss, epoch = (i + 1), save_path = latest_chkpt, scaler = scaler)
         # Saving the best checkpoint i.e. if current epoch's val loss is less than previous epoch's val loss
         # If current val loss is less than best_val_loss then best_val_loss is updated to the current val loss
         if val_loss < best_val_loss:
@@ -286,7 +307,7 @@ def main():
             best_val_loss = val_loss
             best_chkpt = CHECKPOINT_DIR / 'best.pt'
             save_model_checkpoint(model = model, lr = lr, optimizer = optimizer, scheduler = lr_scheduler, 
-                                          train_loss = train_loss, val_loss = val_loss, epoch = (i + 1), save_path = best_chkpt)
+                                          train_loss = train_loss, val_loss = val_loss, epoch = (i + 1), save_path = best_chkpt, scaler = scaler)
             print('Model val improved. Best checkpoint saved')
         else:
             # Early stopping implementation
