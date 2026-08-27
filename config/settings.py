@@ -24,5 +24,16 @@ SRC_SEQ_LEN = 256
 TGT_SEQ_LEN = 256
 # Training params
 WARMUP_STEPS = 4000
-N_EPOCHS = 5
+N_EPOCHS = 1
 PATIENCE = 3
+# Memory & Compute optimization params
+# No of CPU cores being used in parallel
+NUM_WORKERS = 4 
+# Boolean variable for loading the data tensors from disk to host memory
+PIN_MEMORY = True 
+# CPU workers created initially will be used by every other epoch rather than creating from scratch
+PERSISTENT_WORKERS = True 
+# This boolean variables controls tensor movement to compute device asynchronously
+NON_BLOCKING = True
+# This boolean controls how many dataloader batches will be fetched preemptively while GPU is processing
+PREFETCH_FACTOR = 2

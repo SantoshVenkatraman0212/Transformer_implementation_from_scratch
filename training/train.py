@@ -16,7 +16,8 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 from config.settings import (DEVICE, D_MODEL, N_BLOCKS, N_HEADS, SRC_VOCAB_SIZE, 
-                             TGT_VOCAB_SIZE, SRC_SEQ_LEN, TGT_SEQ_LEN, DROPOUT, WARMUP_STEPS, N_EPOCHS, PATIENCE)
+                             TGT_VOCAB_SIZE, SRC_SEQ_LEN, TGT_SEQ_LEN, DROPOUT, WARMUP_STEPS, N_EPOCHS, PATIENCE,
+                             NON_BLOCKING)
 from config.paths import CHECKPOINT_DIR
 from data_pipeline.dataloader import create_dataloaders
 from transformer.transformer_model import Transformer
@@ -57,7 +58,7 @@ def create_transformer(src_vocab_size: int, tgt_vocab_size: int, d_model: int, n
                  src_max_seq_len, tgt_max_seq_len, dropout)
 
     # Returning the model by moving it to the compute device
-    return model.to(DEVICE)
+    return model.to(DEVICE, non_blocking = NON_BLOCKING)
 
 def lambda_lr_scheduler(step: int) -> float:
     '''
@@ -120,9 +121,9 @@ def train(model: Transformer, train_dataloader: DataLoader, pad_id: int, device:
     progress_bar = tqdm(train_dataloader, desc = 'Training', unit = 'Batch')
     for batch in progress_bar:
         # Moving the tensors to the device
-        encoder_input = batch['encoder_input'].to(device)
-        decoder_input = batch['decoder_input'].to(device)
-        label = batch['label'].to(device)
+        encoder_input = batch['encoder_input'].to(device, non_blocking = NON_BLOCKING)
+        decoder_input = batch['decoder_input'].to(device, non_blocking = NON_BLOCKING)
+        label = batch['label'].to(device, non_blocking = NON_BLOCKING)
         # Getting padding masks
         src_padding_mask = encoder_input != pad_id 
         tgt_padding_mask = decoder_input != pad_id
@@ -190,9 +191,9 @@ def evaluate(model: Transformer, eval_dataloader: DataLoader, pad_id: int, crite
         progress_bar = tqdm(eval_dataloader, desc = 'Validation', unit = 'Batch')
         # Iterating through each eval dataset batch
         for batch in progress_bar:
-            encoder_input = batch['encoder_input'].to(device)
-            decoder_input = batch['decoder_input'].to(device)
-            label = batch['label'].to(device)
+            encoder_input = batch['encoder_input'].to(device, non_blocking = NON_BLOCKING)
+            decoder_input = batch['decoder_input'].to(device, non_blocking = NON_BLOCKING)
+            label = batch['label'].to(device, non_blocking = NON_BLOCKING)
             # Getting the source and target padding masks
             src_padding_mask = encoder_input != pad_id
             tgt_padding_mask = decoder_input != pad_id

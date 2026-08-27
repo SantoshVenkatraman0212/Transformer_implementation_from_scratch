@@ -25,7 +25,7 @@ def sanity_checks() -> None:
     train_dataset = train_dataloader.dataset
     val_dataset = val_dataloader.dataset
     test_dataset = test_dataloader.dataset
-    print(f'---------- Dataset Statistics ----------')
+    print('---------- Dataset Statistics ----------')
     print(f'No of train dataset samples: {len(train_dataset)}')
     print(f'No of val dataset samples: {len(val_dataset)}')
     print(f'No of test dataset samples: {len(test_dataset)}')
